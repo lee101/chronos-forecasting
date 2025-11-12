@@ -13,6 +13,25 @@ from einops import rearrange, repeat
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import ModelOutput
 
+try:  # pragma: no cover - optional torch APIs depending on version
+    from torch.compiler import is_compiling as _torch_is_compiling
+except ImportError:  # pragma: no cover - fallback for older torch versions
+    try:
+        from torch._dynamo import is_compiling as _torch_is_compiling
+    except ImportError:  # pragma: no cover - torch<2.0
+
+        def _torch_is_compiling() -> bool:
+            return False
+
+def _assert_no_nan_compile_safe(tensor: torch.Tensor, message: str) -> None:
+    """Runtime validation that is skipped when torch.compile is tracing."""
+
+    if _torch_is_compiling():  # Avoid data-dependent Python branching inside compiled graphs.
+        return
+
+    if torch.isnan(tensor).any().item():
+        raise ValueError(message)
+
 from chronos.chronos_bolt import InstanceNorm, Patch
 
 from .config import Chronos2CoreConfig, Chronos2ForecastingConfig
@@ -441,11 +460,11 @@ class Chronos2Model(PreTrainedModel):
 
             future_covariates = torch.where(future_covariates_mask > 0.0, future_covariates, 0.0)
 
-            if torch.isnan(future_covariates).any():
-                raise ValueError(
-                    "future_covariates contains NaN values at indices not masked by future_covariates_mask. "
-                    "Input the correct future_covariates_mask or omit it to automatically infer the mask based on NaN values."
-                )
+            _assert_no_nan_compile_safe(
+                future_covariates,
+                "future_covariates contains NaN values at indices not masked by future_covariates_mask. "
+                "Input the correct future_covariates_mask or omit it to automatically infer the mask based on NaN values.",
+            )
 
             # add padding if the length of future_covariates is not an integer multiple of output_patch_size
             if num_output_patches * output_patch_size > future_covariates.shape[-1]:

@@ -213,14 +213,31 @@ class MHA(nn.Module):
             attn_output: [batch, n_heads, seq_len, kv_proj_dim]
             attn_weights: None (SDPA doesn't return weights)
         """
-        attn_output = nn.functional.scaled_dot_product_attention(
-            query_states,
-            key_states,
-            value_states,
-            attn_mask=mask,
-            dropout_p=self.dropout if self.training else 0.0,
-            scale=1.0,  # Match eager implementation (no scaling)
-        )
+        # Try SDPA with automatic backend selection first
+        try:
+            attn_output = nn.functional.scaled_dot_product_attention(
+                query_states,
+                key_states,
+                value_states,
+                attn_mask=mask,
+                dropout_p=self.dropout if self.training else 0.0,
+                scale=1.0,  # Match eager implementation (no scaling)
+            )
+        except RuntimeError as e:
+            # If "Invalid backend" error, fall back to MATH backend which is always available
+            if "Invalid backend" in str(e) or "backend" in str(e).lower():
+                # Use sdpa_kernel context manager to force MATH backend
+                with torch.nn.attention.sdpa_kernel([torch.nn.attention.SDPBackend.MATH]):
+                    attn_output = nn.functional.scaled_dot_product_attention(
+                        query_states,
+                        key_states,
+                        value_states,
+                        attn_mask=mask,
+                        dropout_p=self.dropout if self.training else 0.0,
+                        scale=1.0,  # Match eager implementation (no scaling)
+                    )
+            else:
+                raise
 
         return attn_output, None
 
