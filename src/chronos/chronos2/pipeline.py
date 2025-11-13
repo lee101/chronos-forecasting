@@ -375,7 +375,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
 
         return prediction, context, future_covariates
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def predict(
         self,
         inputs: TensorOrArray
@@ -649,7 +649,7 @@ class Chronos2Pipeline(BaseChronosPipeline):
             else:
                 future_covariates = future_covariates[..., :output_size]
             kwargs["future_covariates"] = future_covariates
-        with torch.no_grad():
+        with torch.inference_mode():
             prediction: torch.Tensor = self.model(
                 context=context, group_ids=group_ids, num_output_patches=num_output_patches, **kwargs
             ).quantile_preds.to(context)
