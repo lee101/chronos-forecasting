@@ -10,6 +10,7 @@ from typing import cast
 import torch
 import torch.nn as nn
 from einops import rearrange, repeat
+from transformers.configuration_utils import PretrainedConfig
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import ModelOutput
 
@@ -215,7 +216,7 @@ class Chronos2Output(ModelOutput):
 
 
 class Chronos2Model(PreTrainedModel):
-    config_class = Chronos2CoreConfig  # type: ignore[assignment]
+    config_class: type[PretrainedConfig] = Chronos2CoreConfig
     _supports_long_horizon: bool = True
     _supports_future_covariates: bool = True
     _supports_sdpa: bool = True
